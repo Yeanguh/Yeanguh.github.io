@@ -1,0 +1,401 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta name="generator" content="Hexo 3.8.0"><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description" content="大道至简"><title>关于webp图片格式调研及测试 | Yeanguh Blog</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/normalize/8.0.1/normalize.min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/grids-responsive-min.css"><link rel="stylesheet" href="//lib.baomitu.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//lib.baomitu.com/jquery/3.4.0/jquery.min.js"></script><link rel="icon" mask sizes="any" href="/favicon.ico"><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">关于webp图片格式调研及测试</h1><a id="logo" href="/.">Yeanguh Blog</a><p class="description">Get到的技能和踩过的坑</p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> Home</i></a><a href="/archives/"><i class="fa fa-archive"> Archive</i></a><a href="/about/"><i class="fa fa-user"> About</i></a><a href="/atom.xml"><i class="fa fa-rss"> RSS</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">关于webp图片格式调研及测试</h1><div class="post-meta">Apr 29, 2019<span> | </span><span class="category"><a href="/categories/Webp/">Webp</a></span></div><div class="post-content"><h2 id="资料收集"><a href="#资料收集" class="headerlink" title="资料收集"></a>资料收集</h2><h3 id="什么是-WebP？"><a href="#什么是-WebP？" class="headerlink" title="什么是 WebP？"></a>什么是 WebP？</h3><p>WebP（发音 weppy），是一种支持有损压缩和无损压缩的图片文件格式，派生自图像编码格式 VP8。根据 Google 的测试，无损压缩后的 WebP 比 PNG 文件少了 45％ 的文件大小，即使这些 PNG 文件经过其他压缩工具压缩之后，WebP 还是可以减少 28％ 的文件大小。</p>
+<p>2010 年发布的 WebP 已经不算是新鲜事物了，在 Google 的明星产品如 Youtube、Gmail、Google Play 中都可以看到 WebP 的身影，而 Chrome 网上商店甚至已完全使用了 WebP。国外公司如 Facebook、ebay 和国内公司如腾讯、淘宝、美团等也早已尝鲜。目前 WebP 也在我厂很多的项目中得到应用，如腾讯新闻客户端、腾讯网、QQ空间等，同时也有一些针对 WebP 的图片格式转换工具，如智图（<a href="http://zhitu.tencent.com），iSparta（http://isparta.github.io/）等。" target="_blank" rel="noopener">http://zhitu.tencent.com），iSparta（http://isparta.github.io/）等。</a></p>
+<h3 id="WebP-的优势"><a href="#WebP-的优势" class="headerlink" title="WebP 的优势"></a>WebP 的优势</h3><p>上面只是简单介绍了这种图片格式的背景和应用，不过 “talk is cheap”，这种格式优势在哪里？除了压缩效果极好，图片质量能否得到保障？这需要更理性客观的数据：</p>
+<p>这里列举一个简单的测试：对比 PNG 原图、PNG 无损压缩、PNG 转 WebP（无损）、PNG 转 WebP（有损）的压缩效果。更多测试查看 <a href="https://isparta.github.io" target="_blank" rel="noopener">https://isparta.github.io</a> （请用 Chrome 浏览器打开）</p>
+<p>有损 WebP VS JPG<br><img src="https://img2018.cnblogs.com/blog/1517103/201904/1517103-20190428162510074-2125635269.png" alt="有损 WebP VS JPG"></p>
+<p>当 WebP 将 JPG 压缩到相当于原图 90% 质量 时，图片体积减少了 50% 左右。当 WebP 将 JPG 压缩到相当于原图 80% 质量时，图片体积则减少了 60%~80%。</p>
+<p>有损 WebP 压缩性能优于 JPG 的原因主要是其预测编码技术先进，并且宏块自适应量化也带来了压缩效率的提升，而布尔算术编码与霍夫曼编码相比提升了 5%~10% 的压缩性能。<br>无损 WebP 对比 PNG<br><img src="https://img2018.cnblogs.com/blog/1517103/201904/1517103-20190428162539495-288128515.png" alt="无损 WebP 对比 PNG"></p>
+<p>与主流图片对别<br><img src="https://img2018.cnblogs.com/blog/1517103/201904/1517103-20190428162615682-2104244072.png" alt></p>
+<h2 id="实际测试"><a href="#实际测试" class="headerlink" title="实际测试"></a>实际测试</h2><h3 id="使用Python的PIL库测试-需要最新版本6-0支持webp格式"><a href="#使用Python的PIL库测试-需要最新版本6-0支持webp格式" class="headerlink" title="使用Python的PIL库测试(需要最新版本6.0支持webp格式)"></a>使用Python的PIL库测试(需要最新版本6.0支持webp格式)</h3><p>参数说明</p>
+<pre><code>im.save(filename + &quot;.webp&quot;, &quot;WEBP&quot;,quality=quality)
+</code></pre><ul>
+<li>文件大小小于1M</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>图片名</th>
+<th>原始大小(k)</th>
+<th>质量100(转换后大小k:消耗时间ms:压缩率)</th>
+<th>质量75(转换后大小k:消耗时间ms:压缩率)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.jpg</td>
+<td>99.57</td>
+<td>93.75 :   167.89  :   5.85%</td>
+<td>21.2   :   53.97   :   78.71%</td>
+</tr>
+<tr>
+<td>10.jpg</td>
+<td>34.11</td>
+<td>53.72 :   32.98   :   -57.49%</td>
+<td>14.22  :   23.98   :   58.31%</td>
+</tr>
+<tr>
+<td>100.jpg</td>
+<td>22.88</td>
+<td>34.61 :   28.98   :   -51.27%</td>
+<td>8.31   :   21.99   :   63.68%</td>
+</tr>
+<tr>
+<td>101.jpg</td>
+<td>26.57</td>
+<td>41.72 :   30.98   :   -57.02%</td>
+<td>9.48   :   23.98   :   64.32%</td>
+</tr>
+<tr>
+<td>102.jpg</td>
+<td>18.67</td>
+<td>27.0  :   25.99   :   -44.62%</td>
+<td>5.78   :   19.99   :   69.04%</td>
+</tr>
+<tr>
+<td>103.jpg</td>
+<td>110.72</td>
+<td>110.11:   74.95   :   0.55%</td>
+<td>26.27  :   54.97   :   76.27%</td>
+</tr>
+<tr>
+<td>104.jpg</td>
+<td>179.54</td>
+<td>47.26 :   30.98   :   73.68%</td>
+<td>10.8   :   22.99   :   93.98%</td>
+</tr>
+<tr>
+<td>105.jpg</td>
+<td>32.43</td>
+<td>50.91 :   31.98   :   -56.98%</td>
+<td>13.47  :   23.99   :   58.46%</td>
+</tr>
+<tr>
+<td>106.jpg</td>
+<td>31.81</td>
+<td>52.32 :   32.98   :   -64.48%</td>
+<td>12.48  :   29.98   :   60.77%</td>
+</tr>
+<tr>
+<td>107.jpg</td>
+<td>66.18</td>
+<td>144.21:   83.95   :   -117.91%</td>
+<td>35.42  :   62.96   :   46.48%</td>
+</tr>
+<tr>
+<td>108.jpg</td>
+<td>32.6</td>
+<td>61.65 :   79.96   :   -89.11%</td>
+<td>12.31  :   50.96   :   62.24%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>文件大于1M</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>图片名</th>
+<th>原始大小(k)</th>
+<th>质量100(转换后大小k: 消耗时间ms:压缩率)</th>
+<th>质量75(转换后大小k: 消耗时间ms :压缩率)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>17.jpeg</td>
+<td>931.15</td>
+<td>939.24 :   2178.65  :   -0.87%</td>
+<td>306.95 :   5579.53  :   67.04%</td>
+</tr>
+<tr>
+<td>1.jpeg</td>
+<td>2620.27</td>
+<td>3258.7 :   3557.79  :   -24.37%</td>
+<td>984.66 :   6579.91  :   62.42%</td>
+</tr>
+<tr>
+<td>16.jpeg</td>
+<td>1657.2</td>
+<td>687.56 :   6576.91  :   58.51%</td>
+<td>143.93 :   4463.23  :   91.31%</td>
+</tr>
+<tr>
+<td>14.jpeg</td>
+<td>4386.87</td>
+<td>2677.85 :   4474.22  :   38.96%</td>
+<td>466.51 :   10093.73    :   89.37%</td>
+</tr>
+<tr>
+<td>13.jpeg</td>
+<td>3068.32</td>
+<td>4566.25 :   6616.89  :   -48.82%</td>
+<td>996.69 :   13679.5  :   67.52%</td>
+</tr>
+<tr>
+<td>12.jpeg</td>
+<td>1061.62</td>
+<td>1346.44 :   9029.39  :   -26.83%</td>
+<td>353.87 :   15291.46    :   66.67%</td>
+</tr>
+<tr>
+<td>18.jpeg</td>
+<td>1121.79</td>
+<td>1280.48 :   12631.14    :   -14.15%</td>
+<td>112.97 :   7239.41  :   89.93%</td>
+</tr>
+<tr>
+<td>19.jpeg</td>
+<td>848.29</td>
+<td>1344.75 :   14135.18    :   -58.52%</td>
+<td>353.47 :   5392.59  :   58.33%</td>
+</tr>
+<tr>
+<td>100.jpeg</td>
+<td>9446.42</td>
+<td>2697.1   :   16651.65    :   71.45%</td>
+<td>313.62 :   21351.52    :   96.68%</td>
+</tr>
+<tr>
+<td>11.jpg</td>
+<td>5780.23</td>
+<td>2102.63   :   20296.39    :   63.62%</td>
+<td>236.71 :   16375.65    :   95.9%</td>
+</tr>
+<tr>
+<td>15.jpeg</td>
+<td>5231.54</td>
+<td>1843.42   :   18833.29    :   64.76%</td>
+<td>154.02 :   21408.48    :   97.06%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="使用libwebp"><a href="#使用libwebp" class="headerlink" title="使用libwebp"></a>使用libwebp</h3><ul>
+<li>time cwebp -lossless -q 100 filename -o filename.webp</li>
+<li><p>压缩参数说明：</p>
+<pre><code>-lossless：无损压缩
+-q：压缩质量，值越大越图片质量越好
+-m：压缩方式，值越大则图片质量越好，体积越小，但是耗时较长
+</code></pre></li>
+</ul>
+<p>可以发现，无损压缩表现很稳定，压缩质量越高，压缩效果也越好。而有损压缩在压缩质量设置为 75 以上之后，压缩效果反而减弱，甚至压缩后的图片体积会大于压缩前的体积。</p>
+<table>
+<thead>
+<tr>
+<th>图片名</th>
+<th>原大小</th>
+<th>无损100（大小:消耗时间s)</th>
+<th>有损100(大小:消耗时间s)</th>
+<th>有损75(大小:消耗时间s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.jpg</td>
+<td>117k</td>
+<td>435K:1.50s</td>
+<td>177K:0.27s</td>
+<td>48K:0.20s</td>
+</tr>
+<tr>
+<td>2.jpg</td>
+<td>272k</td>
+<td>1.6M:3.21s</td>
+<td>680K:0.90s</td>
+<td>259K:0.75s</td>
+</tr>
+<tr>
+<td>3.jpg</td>
+<td>300k</td>
+<td>938K:4.50s</td>
+<td>448K:0.81s</td>
+<td>113k:0.75s</td>
+</tr>
+<tr>
+<td>4.jpg</td>
+<td>576k</td>
+<td>753K:1.94s</td>
+<td>296K:0.49s</td>
+<td>67K:0.38s</td>
+</tr>
+<tr>
+<td>5.jpg</td>
+<td>805k</td>
+<td>3.2M:9.88s</td>
+<td>1.2M:1.52s</td>
+<td>274K:1.12s</td>
+</tr>
+<tr>
+<td>6.jpg</td>
+<td>1.4M</td>
+<td>5.5M:9.04s</td>
+<td>2.3M:1.70s</td>
+<td>551K:1.49s</td>
+</tr>
+<tr>
+<td>01.jpg</td>
+<td>119K</td>
+<td>338K:1.55s</td>
+<td>119K:0.25s</td>
+<td>28K:0.19s</td>
+</tr>
+<tr>
+<td>02.jpg</td>
+<td>207K</td>
+<td>486K:2.22s</td>
+<td>229K:0.35s</td>
+<td>76K:0.24s</td>
+</tr>
+<tr>
+<td>03.jpg</td>
+<td>305K</td>
+<td>1.4M:3.58s</td>
+<td>653K:0.87s</td>
+<td>225K:0.87s</td>
+</tr>
+<tr>
+<td>04.jpg</td>
+<td>477K</td>
+<td>2.5M:4.84s</td>
+<td>1000K:0.59s</td>
+<td>307K:0.85s</td>
+</tr>
+<tr>
+<td>05.jpeg</td>
+<td>617K</td>
+<td>740K:3.31s</td>
+<td>418K:0.82ss</td>
+<td>54K:0.79s</td>
+</tr>
+<tr>
+<td>06.jpeg</td>
+<td>932K</td>
+<td>2.4M:4.82s</td>
+<td>940K:1.13s</td>
+<td>307K:0.99s</td>
+</tr>
+</tbody>
+</table>
+<h3 id="jpg-压缩"><a href="#jpg-压缩" class="headerlink" title="jpg 压缩"></a>jpg 压缩</h3><ul>
+<li><p>time -p convert -quality 100 filename.jpg filename.jpg</p>
+</li>
+<li><p>压缩参数说明：</p>
+</li>
+</ul>
+<p>-quality: 图片压缩质量</p>
+<table>
+<thead>
+<tr>
+<th>图片名</th>
+<th>原大小</th>
+<th>quality=100(大小:消耗时间s)</th>
+<th>quality=75(大小:消耗时间s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.jpg</td>
+<td>117k</td>
+<td>227K:0.14s</td>
+<td>63K:0.04s</td>
+</tr>
+<tr>
+<td>2.jpg</td>
+<td>272k</td>
+<td>694K:0.16s</td>
+<td>297K:0.13s</td>
+</tr>
+<tr>
+<td>3.jpg</td>
+<td>300k</td>
+<td>744K:0.23s</td>
+<td>262K:0.2s</td>
+</tr>
+<tr>
+<td>4.jpg</td>
+<td>576k</td>
+<td>544K:0.13s</td>
+<td>107K:0.09s</td>
+</tr>
+<tr>
+<td>5.jpg</td>
+<td>805k</td>
+<td>1.8M:0.21s</td>
+<td>430K:0.36s</td>
+</tr>
+<tr>
+<td>6.jpg</td>
+<td>1.4M</td>
+<td>2.7M:0.57s</td>
+<td>720K:0.42s</td>
+</tr>
+<tr>
+<td>01.jpg</td>
+<td>119K</td>
+<td>188K:0.05s</td>
+<td>50K:0.04s</td>
+</tr>
+<tr>
+<td>02.jpg</td>
+<td>207K</td>
+<td>288K:0.07s</td>
+<td>93K:0.05s</td>
+</tr>
+<tr>
+<td>03.jpg</td>
+<td>305K</td>
+<td>734K:0.20s</td>
+<td>307K:0.17s</td>
+</tr>
+<tr>
+<td>04.jpg</td>
+<td>477K</td>
+<td>1.2M:0.24s</td>
+<td>450K:0.20s</td>
+</tr>
+<tr>
+<td>05.jpeg</td>
+<td>617K</td>
+<td>707K:0.24s</td>
+<td>151K:0.19s</td>
+</tr>
+<tr>
+<td>06.jpeg</td>
+<td>932K</td>
+<td>1.6M:0.32s</td>
+<td>477K:0.24s</td>
+</tr>
+</tbody>
+</table>
+<h3 id="最终的结论："><a href="#最终的结论：" class="headerlink" title="最终的结论："></a>最终的结论：</h3><blockquote>
+<p>选择无损压缩时，“-lossless -q 100” 是最佳方案,注意:<strong>cwebp 仅仅对png格式的图片使用无损压缩时，会有较为高效的压缩率和图片质量</strong></p>
+</blockquote>
+<blockquote>
+<p>选择有损压缩时，“-q 75”是最佳方案（图片质量与体积大小达到均衡）建议其他格式图片使用有损压缩</p>
+<p>无论何种压缩参数，加上“-m 6”都能使得输出的 WebP 图片进一步减少体积，量级是1%~2%，但是会增加耗时</p>
+</blockquote>
+<blockquote>
+<p>非png格式的图片选择无损压缩时，“-lossless -q 100” 时编码时间长，图片质量反而极高可能变大，编码时间时间很长，cpu使用率飙升跑满，不建议使用</p>
+<p>建议选择有损压缩时，“-q 75”是最佳方案（图片质量与体积大小达到均衡）建议使用</p>
+</blockquote>
+<h3 id="webp-和jpg-同比例压缩对比可知"><a href="#webp-和jpg-同比例压缩对比可知" class="headerlink" title="webp 和jpg 同比例压缩对比可知"></a>webp 和jpg 同比例压缩对比可知</h3><blockquote>
+<p>即使jpg图片同比例压缩为jpg和webp图片 webp图片也要比jpg图片质量低百分之10~20之间</p>
+</blockquote>
+<h3 id="参考的实时转换的网站和参考文章"><a href="#参考的实时转换的网站和参考文章" class="headerlink" title="参考的实时转换的网站和参考文章"></a>参考的实时转换的网站和参考文章</h3><ul>
+<li><p>实时转换webp图片格式website</p>
+</li>
+<li><p><a href="https://squoosh.app/editor" target="_blank" rel="noopener">https://squoosh.app/editor</a> 支持多种格式，支持无损压缩，自定义参数</p>
+</li>
+<li><a href="http://isparta.github.io/" target="_blank" rel="noopener">http://isparta.github.io/</a> 仅支持png apng webp互转</li>
+<li><p><a href="https://www.upyun.com/webp" target="_blank" rel="noopener">https://www.upyun.com/webp</a> 又拍云 压缩方式应该使用的是有损压缩，</p>
+</li>
+<li><p>参考文章</p>
+</li>
+<li><p><a href="https://cloud.tencent.com/developer/article/1151876" target="_blank" rel="noopener">https://cloud.tencent.com/developer/article/1151876</a> webp的应用分析</p>
+</li>
+<li><a href="https://www.cnblogs.com/xiaozz/p/6450178.html" target="_blank" rel="noopener">https://www.cnblogs.com/xiaozz/p/6450178.html</a> 该文章对于webp的兼容性，编码效率，cpu使用情况等进行了详细分析</li>
+<li><a href="http://www.cnblogs.com/yjken/p/3922299.html" target="_blank" rel="noopener">http://www.cnblogs.com/yjken/p/3922299.html</a> 前端支持webp的方式</li>
+<li><a href="http://www.cnblogs.com/season-huang/p/5804884.html" target="_blank" rel="noopener">http://www.cnblogs.com/season-huang/p/5804884.html</a> 支持webp的实践方案</li>
+<li><a href="http://www.cnblogs.com/Pickcle/p/6247740.html" target="_blank" rel="noopener">http://www.cnblogs.com/Pickcle/p/6247740.html</a> webp加载速度性能测试</li>
+</ul>
+</div><div class="tags"><a href="/tags/webp/">webp</a></div><div class="post-nav"><a class="pre" href="/2019/05/12/10_其他/踩坑/">踩坑</a><a class="next" href="/2019/04/03/05_计算机基础原理/01_原码、反码、补码/">原码 反码 补码</a></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form class="search-form" action="//www.google.com/search" method="get" accept-charset="utf-8" target="_blank"><input type="text" name="q" maxlength="20" placeholder="Search"><input type="hidden" name="sitesearch" value="http://yoursite.com"></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Categories</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Ajax/">Ajax</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Django/">Django</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Docker/">Docker</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Flask/">Flask</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Git/">Git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Linux/">Linux</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Lua/">Lua</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Mysql/">Mysql</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Nginx/">Nginx</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Python/">Python</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Shell/">Shell</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Webp/">Webp</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/mysql/">mysql</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/其他/">其他</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/坑/">坑</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/消息队列/">消息队列</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/数据库常用命令/" style="font-size: 15px;">数据库常用命令</a> <a href="/tags/原理/" style="font-size: 15px;">原理</a> <a href="/tags/svn/" style="font-size: 15px;">svn</a> <a href="/tags/TCP/" style="font-size: 15px;">TCP</a> <a href="/tags/UDP-TCP/" style="font-size: 15px;">UDP/TCP</a> <a href="/tags/docker/" style="font-size: 15px;">docker</a> <a href="/tags/ubuntu/" style="font-size: 15px;">ubuntu</a> <a href="/tags/markdown/" style="font-size: 15px;">markdown</a> <a href="/tags/lua/" style="font-size: 15px;">lua</a> <a href="/tags/Lua语法/" style="font-size: 15px;">Lua语法</a> <a href="/tags/Python/" style="font-size: 15px;">Python</a> <a href="/tags/python/" style="font-size: 15px;">python</a> <a href="/tags/pymysql/" style="font-size: 15px;">pymysql</a> <a href="/tags/queue/" style="font-size: 15px;">queue</a> <a href="/tags/process/" style="font-size: 15px;">process</a> <a href="/tags/多进程/" style="font-size: 15px;">多进程</a> <a href="/tags/互斥锁/" style="font-size: 15px;">互斥锁</a> <a href="/tags/多线程/" style="font-size: 15px;">多线程</a> <a href="/tags/资源竞争/" style="font-size: 15px;">资源竞争</a> <a href="/tags/pickle/" style="font-size: 15px;">pickle</a> <a href="/tags/base64/" style="font-size: 15px;">base64</a> <a href="/tags/shell/" style="font-size: 15px;">shell</a> <a href="/tags/mysql/" style="font-size: 15px;">mysql</a> <a href="/tags/view/" style="font-size: 15px;">view</a> <a href="/tags/index/" style="font-size: 15px;">index</a> <a href="/tags/transaction/" style="font-size: 15px;">transaction</a> <a href="/tags/Redis/" style="font-size: 15px;">Redis</a> <a href="/tags/git/" style="font-size: 15px;">git</a> <a href="/tags/编辑器/" style="font-size: 15px;">编辑器</a> <a href="/tags/vim/" style="font-size: 15px;">vim</a> <a href="/tags/Linux/" style="font-size: 15px;">Linux</a> <a href="/tags/常用指令/" style="font-size: 15px;">常用指令</a> <a href="/tags/nginx/" style="font-size: 15px;">nginx</a> <a href="/tags/Django/" style="font-size: 15px;">Django</a> <a href="/tags/crontab/" style="font-size: 15px;">crontab</a> <a href="/tags/虚拟环境/" style="font-size: 15px;">虚拟环境</a> <a href="/tags/flask/" style="font-size: 15px;">flask</a> <a href="/tags/SQLAlchemy/" style="font-size: 15px;">SQLAlchemy</a> <a href="/tags/ORM模型/" style="font-size: 15px;">ORM模型</a> <a href="/tags/请求钩子/" style="font-size: 15px;">请求钩子</a> <a href="/tags/flask框架/" style="font-size: 15px;">flask框架</a> <a href="/tags/Flask/" style="font-size: 15px;">Flask</a> <a href="/tags/Jinjia2/" style="font-size: 15px;">Jinjia2</a> <a href="/tags/sqlalchemy/" style="font-size: 15px;">sqlalchemy</a> <a href="/tags/RabbitMQ/" style="font-size: 15px;">RabbitMQ</a> <a href="/tags/rabbitmq/" style="font-size: 15px;">rabbitmq</a> <a href="/tags/redis/" style="font-size: 15px;">redis</a> <a href="/tags/curl/" style="font-size: 15px;">curl</a> <a href="/tags/linux/" style="font-size: 15px;">linux</a> <a href="/tags/celery/" style="font-size: 15px;">celery</a> <a href="/tags/ajax/" style="font-size: 15px;">ajax</a> <a href="/tags/前后端数据交互/" style="font-size: 15px;">前后端数据交互</a> <a href="/tags/webp/" style="font-size: 15px;">webp</a> <a href="/tags/bug/" style="font-size: 15px;">bug</a> <a href="/tags/坑/" style="font-size: 15px;">坑</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Recent</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2019/05/12/10_其他/踩坑/">踩坑</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/04/29/10_其他/02_webp图片技术调研/">关于webp图片格式调研及测试</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/04/03/05_计算机基础原理/01_原码、反码、补码/">原码 反码 补码</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/03/14/01_语言/Python/09_关于bytes和bytearray类型/">关于python的bytes和bytearry类型的区别</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/03/05/01_语言/Python/08_Python 防止sql注入的两种方式/">Python防止sql注入的两种方法</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/03/02/01_语言/Lua/lua语法基础(1)/">Lua基本语法</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/01/23/02_数据库/mysql/03_mysql 字段被截断/">关于mysql中字段类型为text文本存储json格式数据，字段被截断的问题</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/01/06/01_语言/Shell/Shell基础（二）/">shell基础语法</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/01/05/10_其他/01_markdown页内跳转/">markdown实现页内跳转的三种方法</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/12/23/02_数据库/mysql/05_mysql数据库建表规范/">mysql数据库建表规范</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Links</i></div><ul></ul><a href="http://www.example1.com/" title="site-name1" target="_blank">site-name1</a><ul></ul><a href="http://www.example2.com/" title="site-name2" target="_blank">site-name2</a><ul></ul><a href="http://www.example3.com/" title="site-name3" target="_blank">site-name3</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2019 <a href="/." rel="nofollow">Yeanguh Blog.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css"><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
