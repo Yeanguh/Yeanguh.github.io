@@ -1,0 +1,398 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta name="generator" content="Hexo 3.8.0"><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description" content="大道至简"><title>redis操作规范 | Yeanguh Blog</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/normalize/8.0.1/normalize.min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/grids-responsive-min.css"><link rel="stylesheet" href="//lib.baomitu.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//lib.baomitu.com/jquery/3.4.0/jquery.min.js"></script><link rel="icon" mask sizes="any" href="/favicon.ico"><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">redis操作规范</h1><a id="logo" href="/.">Yeanguh Blog</a><p class="description">Get到的技能和踩过的坑</p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> 首页</i></a><a href="/archives/"><i class="fa fa-archive"> 文章归档</i></a><a href="/atom.xml"><i class="fa fa-rss"> Rss订阅</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">redis操作规范</h1><div class="post-meta">Jul 13, 2019</div><div class="post-content"><h2 id="一、键值设计"><a href="#一、键值设计" class="headerlink" title="一、键值设计"></a>一、键值设计</h2><ol>
+<li><p>key名设计<br> (1)【建议】: 可读性和可管理性以业务名(或数据库名)为前缀(防止key冲突)，用冒号分隔，比如:业务名_表名_idugc_video_1<br> (2)【建议】：简洁性保证语义的前提下，控制key的长度，当key较多时，内存占用也不容忽视，例如：user_{uid}_friends_messages_{mid}简化为u_{uid}_fr_m_{mid}。<br> (3)【强制】：不要包含特殊字符反例：包含空格、换行、单双引号以及其他转义字符</p>
+</li>
+<li><p>value设计<br> (1)【强制】：拒绝bigkey(防止网卡流量、慢查询)string类型控制在10KB以内，hash、list、set、zset元素个数不要超过5000。</p>
+<pre><code>反例：一个包含200万个元素的list。
+非字符串的bigkey，不要使用del删除，使用hscan、sscan、zscan方式渐进式删除，同时要注意防止bigkey过期时间自动删除问题
+(例如一个200万的zset设置1小时过期，会触发del操作，造成阻塞，而且该操作不会不出现在慢查询中(latency可查))，查找方法和删除方法
+</code></pre><p> (2)【推荐】：选择适合的数据类型。</p>
+<pre><code>例如：实体类型(要合理控制和使用数据结构内存编码优化配置,例如ziplist，但也要注意节省内存和性能之间的平衡)
+反例：
+    setuser:1:nametom
+    setuser:1:age19
+    setuser:1:favor football
+正例:
+    hmsetuser:1nametomage19favorfootball
+</code></pre></li>
+<li><p>【推荐】：控制key的生命周期，redis不是垃圾桶。建议使用expire设置过期时间(条件允许可以打散过期时间，防止集中过期,防止缓存雪崩)，不过期的数据重点关注idletime。</p>
+</li>
+</ol>
+<h2 id="二、命令使用"><a href="#二、命令使用" class="headerlink" title="二、命令使用"></a>二、命令使用</h2><ol>
+<li>【推荐】 O(N)命令关注N的数量例如hgetall、lrange、smembers、zrange、sinter等并非不能使用，但是需要明确N的值。有遍历的需求可以使用hscan、sscan、zscan代替。</li>
+<li>【推荐】：禁用命令禁止线上使用keys、flushall、flushdb等，通过redis的rename机制禁掉命令，或者使用scan的方式渐进式处理。</li>
+<li>【推荐】合理使用selectredis的多数据库较弱，使用数字进行区分，很多客户端支持较差，同时多业务用多数据库实际还是单线程处理，会有干扰。</li>
+<li>【推荐】使用批量操作提高效率<br> 原生命令：例如mget、mset。<br> 非原生命令：可以使用pipeline提高效率。但要注意控制一次批量操作的元素个数(例如500以内，实际也和元素字节数有关)。<br> 注意两者不同：<ol>
+<li>原生是原子操作，pipeline是非原子操作。</li>
+<li>pipeline可以打包不同的命令，原生做不到</li>
+<li>pipeline需要客户端和服务端同时支持。</li>
+</ol>
+</li>
+<li>【建议】Redis事务功能较弱，不建议过多使用Redis的事务功能较弱(不支持回滚)，而且集群版本(自研和官方)要求一次事务操作的key必须在一个slot上(可以使用hashtag功能解决)</li>
+<li>【建议】Redis集群版本在使用Lua上有特殊要求：<ol>
+<li>所有key都应该由 KEYS 数组来传递，redis.call/pcall 里面调用的redis命令，key的位置，必须是KEYS array, 否则直接返回error，”-ERR bad lua script for redis cluster, all the keys that the script uses should be passed using the KEYS arrayrn”</li>
+<li>所有key，必须在1个slot上，否则直接返回error, “-ERR eval/evalsha command keys must in same slotrn”</li>
+</ol>
+</li>
+<li>【建议】必要情况下使用monitor命令时，要注意不要长时间使用。</li>
+</ol>
+<h2 id="三、客户端使用"><a href="#三、客户端使用" class="headerlink" title="三、客户端使用"></a>三、客户端使用</h2><ol>
+<li>【推荐】避免多个应用使用一个Redis实例正例：不相干的业务拆分，公共数据做服务化。</li>
+<li>【推荐】使用带有连接池的数据库，可以有效控制连接，同时提高效率，标准使用方式：</li>
+<li>【建议】高并发下建议客户端添加熔断功能(例如netflix hystrix)</li>
+<li>【推荐】设置合理的密码，如有必要可以使用SSL加密访问（阿里云Redis支持）</li>
+<li>【建议】根据自身业务类型，选好maxmemory-policy(最大内存淘汰策略)，设置好过期时间。<br> 默认策略是:volatile-lru，即超过最大内存后，在过期键中使用lru算法进行key的剔除，保证不过期数据不被删除，但是可能会出现OOM问题。<br> 其他策略如下：<pre><code>allkeys-lru：根据LRU算法删除键，不管数据有没有设置超时属性，直到腾出足够空间为止。
+allkeys-random：随机删除所有键，直到腾出足够空间为止。
+volatile-random:随机删除过期键，直到腾出足够空间为止。
+volatile-ttl：根据键值对象的ttl属性，删除最近将要过期数据。如果没有，回退到noeviction策略。
+noeviction：不会剔除任何数据，拒绝所有写入操作并返回客户端错误信息&quot;(error) OOM command not allowed when used memory&quot;，此时Redis只响应读操作。
+</code></pre></li>
+</ol>
+<h2 id="四、数据结构的使用"><a href="#四、数据结构的使用" class="headerlink" title="四、数据结构的使用"></a>四、数据结构的使用</h2><h3 id="字符串-string"><a href="#字符串-string" class="headerlink" title="字符串(string)"></a>字符串(string)</h3><pre><code>字符串类型是redis最基础的数据结构，首先键是字符串类型，而且其他几种结构都是在字符串类型基础上构建的。
+字符串类型实际上可以是字符串（简单的字符串、复杂的字符串（xml、json）、数字（整数、浮点数）、二进制（图片、音频、视频）），但最大不能超过512M。
+</code></pre><p>使用场景:</p>
+<ul>
+<li>缓存功能：字符串最经典的使用场景，redis最为缓存层，Mysql作为储存层，绝大部分请求数据都是redis中获取，由于redis具有支撑高并发特性，所以缓存通常能起到加速读写和降低 后端压力的作用。</li>
+<li>计数器：许多运用都会使用redis作为计数的基础工具，他可以实现快速计数、查询缓存的功能，同时数据可以一步落地到其他的数据源。如：视频播放数系统就是使用redis作为视频播放数计数的基础组件。</li>
+<li>共享session：出于负载均衡的考虑，分布式服务会将用户信息的访问均衡到不同服务器上，用户刷新一次访问可能会需要重新登录，为避免这个问题可以用redis将用户session集中管理，在这种模式下只要保证redis的高可用和扩展性的，每次获取用户更新或查询登录信息都直接从redis中集中获取。</li>
+<li>限速：处于安全考虑，每次进行登录时让用户输入手机验证码，为了短信接口不被频繁访问，会限制用户每分钟获取验证码的频率。</li>
+</ul>
+<p>常用指令的复杂度</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>set key value</td>
+<td>设置key-value</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>get key</td>
+<td>获取key-value</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>del key</td>
+<td>删除key-value</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>setnx setxx</td>
+<td>根据key是否存在 设置key-value</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>incr decr</td>
+<td>计数</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>mget mset</td>
+<td>批量获取批量设置key-value</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="哈希-hash"><a href="#哈希-hash" class="headerlink" title="哈希(hash)"></a>哈希(hash)</h3><pre><code>在redis中哈希类型是指键本身又是一种键值对结构，如 value={{field1,value1},......{fieldN,valueN}}
+</code></pre><p>使用场景:</p>
+<ul>
+<li><strong>商品信息</strong>有很多规格，规格里面有不同的值,</li>
+<li><strong>用户信息</strong>一个用户有很多个人信息,存储、读取、修改用户属性。</li>
+<li>一般是有那种需要两层key的应用场景，也可以是<strong>删除一个key可以删除所有内容</strong>的场景。</li>
+<li>但是哈希类型和关系型数据库有所不同，哈希类型是稀疏的，而关系型数据库是完全结构化的，关系型数据库可以做复杂的关系查询，而redis去模拟关系型复杂查询开发困难，维护成本高。</li>
+<li>在性能上来说一般hash里面的第二层key，不要超过200个为佳。尽管hash里面的key-value能达到500多MB的存储容量。</li>
+</ul>
+<p>常用指令的复杂度</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hget hset hdel</td>
+<td>获取，设置 ，删除key</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>hexists</td>
+<td>判断hash key是否存在</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>hincrby</td>
+<td>hash计数</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>hgetall hvals hkeys</td>
+<td>hgetall的所有的field的值</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>hmget hmset</td>
+<td>批量获取 批量设置</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="列表-list"><a href="#列表-list" class="headerlink" title="列表(list)"></a>列表(list)</h3><pre><code>列表类型是用来储存多个有序的字符串，列表中的每个字符串成为元素（element）,一个列表最多可以储存2的32次方-1个元素，在redis中，可以队列表两端插入（pubsh）和弹出（pop），还可以获取指定范围的元素列表、获取指定索引下表的元素等，列表是一种比较灵活的数据结构，它可以充当栈和队列的角色，在实际开发中有很多应用场景。
+优点：
+    1.列表的元素是有序的，这就意味着可以通过索引下标获取某个或某个范围内的元素列表。
+    2.列表内的元素是可以重复的。
+</code></pre><p>使用场景:</p>
+<ul>
+<li>消息队列： redis的lpush+brpop命令组合即可实现阻塞队列，生产者客户端是用lupsh从列表左侧插入元素，多个消费者客户端使用brpop命令阻塞时的“抢”列表尾部的元素，多个客户端保证了消费的负载均衡和高可用性</li>
+<li>作为集合存储，比如存储某宝商铺里面的所有商品。</li>
+<li>文章列表：每个用户都有属于自己的文章列表，现在需要分页展示文章列表，此时可以考虑使用列表，列表不但有序同时支持按照索引范围获取元素。</li>
+<li>取最新N个数据的操作</li>
+<li>删除与过滤</li>
+<li>实时分析正在发生的情况,用于数据统计与防止垃圾邮件(结合Set )</li>
+</ul>
+<p>使用列表技巧：</p>
+<pre><code>lpush+lpop=Stack(栈) 
+lpush+rpop=Queue（队列） 
+lpush+ltrim=Capped Collection（有限集合） 
+lpush+brpop=Message Queue（消息队列）
+</code></pre><p>常用指令的复杂度</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rpush key</td>
+<td>右插入</td>
+<td>O(1) ~ O(n)</td>
+</tr>
+<tr>
+<td>lpush key</td>
+<td>左插入</td>
+<td>O(1) ~ O(n)</td>
+</tr>
+<tr>
+<td>lrange key start end</td>
+<td>从左开始 从start到end的所有值</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>lindex key index</td>
+<td>从左开始 索引为index的值</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>rpop key</td>
+<td>右侧移出第一个元素</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>lpop key</td>
+<td>左侧移出第一个元素</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>llen key</td>
+<td>获取数组长度</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>linsert key before</td>
+<td>after value newvalue</td>
+<td>获取数组长度</td>
+<td>O(1)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="集合-set"><a href="#集合-set" class="headerlink" title="集合(set)"></a>集合(set)</h3><pre><code>集合类型也是用来保存多个字符串的元素，但和列表不同的是集合中不允许有重复的元素，并且集合中的元素是
+无序的，不能通过索引下标获取元素，redis除了支持集合内的增删改查，同时还支持多个集合取交集、并集、
+差集，并合理的使用好集合类型，能在实际开发中解决很多实际问题。
+</code></pre><p>使用场景:</p>
+<ul>
+<li>标签（tag）：集合类型比较典型的使用场景，如一个用户对娱乐、体育比较感兴趣，另一个可能对新闻感兴趣，这些兴趣就是标签，有了这些数据就可以得到同一标签的人，以及用户的共同爱好的标签，这些数据对于用户体验以及曾强用户粘度比较重要。（用户和标签的关系维护应该放在一个事物内执行，防止部分命令失败造成数据不一致）</li>
+<li>Uniqe操作,获取某段时间所有数据排重值</li>
+<li>实时系统,反垃圾系统共同好友、二度好友</li>
+<li>利用唯一性,可以统计访问网站的所有独立IP</li>
+<li>好友推荐的时候,根据tag求交集,大于某个threshold就可以推荐</li>
+</ul>
+<p>使用技巧:</p>
+<pre><code>sadd=tagging（标签）
+spop/srandmember=random item（生成随机数，比如抽奖）
+sadd+sinter=social Graph(社交需求)
+sinter key1 key2  交集
+sdiff key1 key2 差集
+sunion key1 key2  并集
+</code></pre><p>常用指令的复杂度</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sadd key element</td>
+<td>向集合中插入元素</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>srem key element</td>
+<td>删除集合中元素</td>
+<td>O(1)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="有序集合-zset"><a href="#有序集合-zset" class="headerlink" title="有序集合(zset)"></a>有序集合(zset)</h3><pre><code>有序集合和集合有着必然的联系，他保留了集合不能有重复成员的特性，但不同得是，有序集合中的元素是可以排序的，但是它和列表的使用索引下标作为排序依据不同的是，它给每个元素设置一个分数，作为排序的依据。（有序集合中的元素不可以重复，但是csore可以重复，就和一个班里的同学学号不能重复，但考试成绩可以相
+同）。
+</code></pre><p>使用场景</p>
+<ul>
+<li>可用于排行榜（新旧程度排名，score可以用时间戳）</li>
+</ul>
+<p>常用指令的复杂度</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>zadd key score element</td>
+<td>向有序集合中添加score和element</td>
+<td>O(logN)</td>
+</tr>
+<tr>
+<td>zscore key element</td>
+<td>获取element的分数</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>zincrby key increScore element</td>
+<td>向集合中插入元素</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>zcard key</td>
+<td>返回有序集合中元素的个数</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>zrank key element</td>
+<td>获取某个元素的正序排名</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>ZREVRANK key member</td>
+<td>获取某个元素的倒序排名</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>zrange key start end</td>
+<td>获取指定排名区间内的元素，正序</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zrevrange key start end</td>
+<td>获取指定排名区间内的元素，倒序</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zrangebyscore key minScore maxScore</td>
+<td>获取指定score区间内的元素，正序</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zrevrangebyscore key maxScore minScore</td>
+<td>获取指定score区间内的元素，倒序</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zcount key minScore maxScore</td>
+<td>获取指定分数区间的成员个数</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zrem key element</td>
+<td>移除集合内指定元素</td>
+<td>O(log(1)</td>
+</tr>
+<tr>
+<td>zremrangebyrank key start end</td>
+<td>移除有序集合中给定的排名区间的所有成员,从0开始</td>
+<td>O(log(n)+m)</td>
+</tr>
+<tr>
+<td>zremrangebyscore key minScore maxScore</td>
+<td>移除有序集合中给定的分数区间的所有成员</td>
+<td>O(log(n)+m)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="常用key指令的复杂度"><a href="#常用key指令的复杂度" class="headerlink" title="常用key指令的复杂度"></a>常用key指令的复杂度</h3><table>
+<thead>
+<tr>
+<th>命令</th>
+<th>作用</th>
+<th>复杂度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>keys</td>
+<td>查看key</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>dbsize</td>
+<td>查看key 个数</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>del</td>
+<td>删除key</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>exists</td>
+<td>查看key是否存在</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>expire</td>
+<td>设置key过期时间</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>type</td>
+<td>查看key数据类型</td>
+<td>O(1)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="底层数据结构"><a href="#底层数据结构" class="headerlink" title="底层数据结构"></a>底层数据结构</h2><p>Redis对使用者暴露了五种Value Type, 其底层实现的数据结构有8种, 分别是:</p>
+<ul>
+<li>SDS - simple synamic string - 支持自动动态扩容的字节数组</li>
+<li>list - 链表</li>
+<li>dict - 使用双哈希表实现的, 支持平滑扩容的字典</li>
+<li>zskiplist - 附加了后向指针的跳跃表</li>
+<li>intset - 用于存储整数数值集合的自有结构</li>
+<li>ziplist - 一种实现上类似于TLV, 但比TLV复杂的, 用于存储任意数据的有序序列的数据结构</li>
+<li>quicklist - 一种以ziplist作为结点的双链表结构, 实现的非常苟</li>
+<li>zipmap - 一种用于在小规模场合使用的轻量级字典结构</li>
+</ul>
+</div><div class="tags"></div><div class="post-nav"><a class="next" href="/2019/05/19/03_服务器/Linux/04_Centos7系统重装相关步骤/">linux 系统重装的几个基本步骤(个人备份使用)</a></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form class="search-form" action="//www.google.com/search" method="get" accept-charset="utf-8" target="_blank"><input type="text" name="q" maxlength="20" placeholder="Search"><input type="hidden" name="sitesearch" value="http://www.yeanguh.com"></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> 分类</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Ajax/">Ajax</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Django/">Django</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Docker/">Docker</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Flask/">Flask</a><span class="category-list-count">7</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Git/">Git</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Java/">Java</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Linux/">Linux</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Lua/">Lua</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Mysql/">Mysql</a><span class="category-list-count">4</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Nginx/">Nginx</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Python/">Python</a><span class="category-list-count">15</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/RabbitMQ/">RabbitMQ</a><span class="category-list-count">3</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Shell/">Shell</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Vim/">Vim</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/Webp/">Webp</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/java/">java</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/mysql/">mysql</a><span class="category-list-count">2</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/python/">python</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/其他/">其他</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/坑/">坑</a><span class="category-list-count">1</span></li><li class="category-list-item"><a class="category-list-link" href="/categories/计算机基础/">计算机基础</a><span class="category-list-count">4</span></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> 标签</i></div><div class="tagcloud"><a href="/tags/markdown/" style="font-size: 15px;">markdown</a> <a href="/tags/bug/" style="font-size: 15px;">bug</a> <a href="/tags/坑/" style="font-size: 15px;">坑</a> <a href="/tags/webp/" style="font-size: 15px;">webp</a> <a href="/tags/python/" style="font-size: 15px;">python</a> <a href="/tags/flask/" style="font-size: 15px;">flask</a> <a href="/tags/请求钩子/" style="font-size: 15px;">请求钩子</a> <a href="/tags/flask框架/" style="font-size: 15px;">flask框架</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> 最近文章</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2019/07/13/02_数据库/redis/03_redis操作规范/">redis操作规范</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/19/03_服务器/Linux/04_Centos7系统重装相关步骤/">linux 系统重装的几个基本步骤(个人备份使用)</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/19/01_语言/java/03_java中的几种关键字的通俗解释/">java中几种关键字的通俗解释</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/18/05_计算机基础原理/04_位运算/">计算机中的几种位运算</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/18/01_语言/java/02_java中关于运算符相关语法坑/">java中关于运算符相关的坑</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/18/01_语言/java/01_java中有关数据类型语法坑/">Java语言中有关数据类型的坑</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/05/12/10_其他/踩坑/">踩坑</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/04/29/10_其他/02_webp图片技术调研/">关于webp图片格式调研及测试</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/04/03/05_计算机基础原理/01_原码、反码、补码/">原码 反码 补码</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/03/14/01_语言/Python/09_关于bytes和bytearray类型/">关于python的bytes和bytearry类型的区别</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> 友情链接</i></div><ul></ul><a href="https://www.cnblogs.com/yanguhung/" title="博客园" target="_blank">博客园</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2019 <a href="/." rel="nofollow">Yeanguh Blog.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css"><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
